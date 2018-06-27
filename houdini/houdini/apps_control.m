@@ -685,16 +685,14 @@ NSString * get_file_in_theme_path(NSString *theme_path, NSString *file_name) {
 }
 
 UIImage *change_image_tint_to(UIImage *src_image, UIColor *color) {
-    
     CGRect rect = CGRectMake(0, 0, src_image.size.width, src_image.size.height);
-    UIGraphicsBeginImageContext(rect.size);
+    UIGraphicsBeginImageContextWithOptions(rect.size, NO, 0);
     CGContextRef context = UIGraphicsGetCurrentContext();
     CGContextClipToMask(context, rect, src_image.CGImage);
     CGContextSetFillColorWithColor(context, [color CGColor]);
     CGContextFillRect(context, rect);
     UIImage *colorized_image = UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
-    
     return colorized_image;
 }
 
@@ -972,7 +970,7 @@ UIImage *get_image_for_radius(int radius, int width, int height) {
     
     printf("[INFO]: image for width and height: %d %d\n", width, height);
     CGRect rect = CGRectMake(0, 0, width, height);
-    UIGraphicsBeginImageContext(rect.size);
+    UIGraphicsBeginImageContextWithOptions(rect.size, NO, 0);
     CGContextRef context = UIGraphicsGetCurrentContext();
     CGContextSetFillColorWithColor(context, [[UIColor blackColor] CGColor]);
     CGContextFillRect(context, rect);
@@ -986,7 +984,7 @@ UIImage *get_image_for_radius(int radius, int width, int height) {
     image_layer.masksToBounds = YES;
     image_layer.cornerRadius = radius;
     
-    UIGraphicsBeginImageContext(src_image.size);
+    UIGraphicsBeginImageContextWithOptions(src_image.size, NO, 0);
     [image_layer renderInContext:UIGraphicsGetCurrentContext()];
     UIImage *rounded_image = UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
@@ -1548,28 +1546,90 @@ kern_return_t apply_passcode_button_theme_for(char * image_path, int number) {
  *  Purpose: sets the active hosts file
  */
 kern_return_t set_custom_hosts(boolean_t use_custom) {
-    
-    kern_return_t ret = KERN_SUCCESS;
-    
-    // revert first
-    copy_file("/etc/bck_hosts", "/etc/hosts", ROOT_UID, WHEEL_GID, 0644);
-    
-    // delete the old 'bck_hosts' file
-    chosen_strategy.strategy_unlink("/etc/bck_hosts");
-    
-    if(use_custom) {
-        
-        printf("[INFO]: requested a custom hosts file!\n");
-        
-        // backup the original one
-        copy_file("/etc/hosts", "/etc/bck_hosts", ROOT_UID, WHEEL_GID, 0644);
-        
-        // copy our custom hosts file
-        char *custom_hosts_path = strdup([[[[NSBundle mainBundle] resourcePath] stringByAppendingString:@"/custom_hosts"] UTF8String]);
-        copy_file(custom_hosts_path, "/etc/hosts", ROOT_UID, WHEEL_GID, 0644);
+    //  use the old method of REPLACING the file if /etc/bck_hosts exists
+    if (access("/etc/bck_hosts", F_OK) != -1) {
+        kern_return_t ret = KERN_SUCCESS;
+        // revert first
+        copy_file("/etc/bck_hosts", "/etc/hosts", ROOT_UID, WHEEL_GID, 0644);
+        // delete the old 'bck_hosts' file
+        chosen_strategy.strategy_unlink("/etc/bck_hosts");
+        if (use_custom) {
+            printf("[INFO]: requested a custom hosts file!\n");
+            // backup the original one
+            copy_file("/etc/hosts", "/etc/bck_hosts", ROOT_UID, WHEEL_GID, 0644);
+            // copy our custom hosts file
+            char *custom_hosts_path = strdup([[[[NSBundle mainBundle] resourcePath] stringByAppendingString:@"/custom_hosts"] UTF8String]);
+            copy_file(custom_hosts_path, "/etc/hosts", ROOT_UID, WHEEL_GID, 0644);
+            // modify the custom_hosts file
+            [[[[NSString stringWithContentsOfFile:@"/etc/hosts" encoding:NSUTF8StringEncoding error:nil] stringByReplacingOccurrencesOfString:@"#HOUDINI_START\n#MHB7" withString:@"#MHB7\n127.0.0.1 localhost\n255.255.255.255 broadcasthost\n::1 localhost"] stringByReplacingOccurrencesOfString:@"#HOUDINI_END" withString:@""] writeToFile:@"/etc/hosts" atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        }
+        return ret;
     }
- 
-    return ret;
+    //  new method: add or remove custom_hosts to or from /etc/hosts
+    //  read the files
+    NSString *hostsPath = @"/etc/hosts";
+    NSError *readError;
+    NSError *writeError;
+    NSString *hosts = [NSString stringWithContentsOfFile:hostsPath encoding:NSUTF8StringEncoding error:&readError];
+    NSString *customHostsPath = [[[NSBundle mainBundle] resourcePath] stringByAppendingString:@"/custom_hosts"];
+    NSString *customHosts = [NSString stringWithContentsOfFile:customHostsPath encoding:NSUTF8StringEncoding error:&readError];
+    NSString *newHosts = [NSString stringWithContentsOfFile:hostsPath encoding:NSUTF8StringEncoding error:&readError];
+    //  if we failed to read a file, return KERN_FAILURE
+    if (readError) {
+        return KERN_FAILURE;
+    }
+    if (use_custom) {
+        //  apply custom hosts
+        //  if custom hosts is already applied, remove it, and if that doesn't work, return KERN_FAILURE
+        if ([hosts containsString:@"#HOUDINI_START"] || [hosts containsString:@"#HOUDINI_END"]) {
+            if (set_custom_hosts(false) == KERN_FAILURE) return KERN_FAILURE;
+            //  re-read the files
+            hosts = [NSString stringWithContentsOfFile:hostsPath encoding:NSUTF8StringEncoding error:&readError];
+            newHosts = [NSString stringWithContentsOfFile:hostsPath encoding:NSUTF8StringEncoding error:&readError];
+            //  if we failed to read a file, return KERN_FAILURE
+            if (readError) {
+                return KERN_FAILURE;
+            }
+        }
+        //  if newHosts doesn't end with a new line, append a new line
+        if (![newHosts hasSuffix:@"\n"]) {
+            newHosts = [newHosts stringByAppendingString:@"\n"];
+        }
+        //  add customHosts to newHosts
+        newHosts = [newHosts stringByAppendingString:customHosts];
+        //  apply
+        [newHosts writeToFile:hostsPath atomically:YES encoding:NSUTF8StringEncoding error:&writeError];
+        if (writeError) {
+            return KERN_FAILURE;
+        }
+        return KERN_SUCCESS;
+    } else {
+        //  remove custom hosts
+        //  if custom hosts isn't applied, return KERN_FAILURE
+        if (![hosts containsString:@"#HOUDINI_START"] || ![hosts containsString:@"#HOUDINI_END"]) {
+            return KERN_FAILURE;
+        }
+        //  remove customHosts from newHosts
+        while ([newHosts containsString:@"#HOUDINI_START"] && [newHosts containsString:@"#HOUDINI_END"]) {
+            NSRange r1 = [newHosts rangeOfString:@"#HOUDINI_START"];
+            NSRange r2 = [newHosts rangeOfString:@"#HOUDINI_END"];
+            //  if the range's location is invalid, return KERN_FAILURE
+            if (r1.location > strlen(newHosts.UTF8String) || r2.location > strlen(newHosts.UTF8String)) return KERN_FAILURE;
+            newHosts = [newHosts stringByReplacingCharactersInRange:NSMakeRange(r1.location, r2.location - r1.location + 12) withString:@""];
+        }
+        newHosts = [newHosts stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (![newHosts hasSuffix:@"\n"]) {
+            newHosts = [newHosts stringByAppendingString:@"\n"];
+        }
+        //  apply
+        [newHosts writeToFile:hostsPath atomically:YES encoding:NSUTF8StringEncoding error:&writeError];
+        if (writeError) {
+            return KERN_FAILURE;
+        }
+        return KERN_SUCCESS;
+    }
+    //  really don't know why we'd reach this line, but if we do, return KERN_FAILURE
+    return KERN_FAILURE;
 }
 
 /*
@@ -1617,7 +1677,7 @@ UIImage *get_scaled_image(UIImage *original_image, CGSize new_size) {
     scaledImageRect.origin.x = (new_size.width - scaledImageRect.size.width) / 2.0f;
     scaledImageRect.origin.y = (new_size.height - scaledImageRect.size.height) / 2.0f;
     
-    UIGraphicsBeginImageContextWithOptions( new_size, NO, 0 );
+    UIGraphicsBeginImageContextWithOptions(new_size, NO, 0);
     [original_image drawInRect:scaledImageRect];
     UIImage* scaledImage = UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
