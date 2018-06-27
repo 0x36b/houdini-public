@@ -86,7 +86,7 @@ mach_port_t passed_priv_port = MACH_PORT_NULL;
     
     if(currentWallpaper != nil) {
         
-        UIGraphicsBeginImageContext(self.view.frame.size);
+        UIGraphicsBeginImageContextWithOptions(self.view.frame.size, NO, 0);
         [[UIImage imageWithData:currentWallpaper] drawInRect:self.view.bounds];
         UIImage *wallpaperImage = UIGraphicsGetImageFromCurrentImageContext();
         UIGraphicsEndImageContext();
@@ -165,7 +165,7 @@ mach_port_t passed_priv_port = MACH_PORT_NULL;
 }
 
 
-- (void) showAlertViewController {
+- (void)showAlertViewController {
     UIViewController *viewController = [self.storyboard instantiateViewControllerWithIdentifier:@"AlertViewController"];
     viewController.providesPresentationContextTransitionStyle = YES;
     viewController.definesPresentationContext = YES;
