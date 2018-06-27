@@ -1,8 +1,5 @@
+#HOUDINI_START
 #MHB7
-127.0.0.1		localhost
-255.255.255.255 broadcasthost
-::1				localhost
-
 :: ad.kixer.com
 :: admob.biz
 :: admob.co.kr
@@ -767,3 +764,4 @@
 0 xp2.zedo.com
 0 yieldmanager.com
 0 yllix.com
+#HOUDINI_END
