@@ -11,8 +11,10 @@
 #include "triple_fetch_remote_call.h"
 #include "apps_control.h"
 #include "utilities.h"
+#include "QuickActionsViewController.h"
 #include <objc/runtime.h>
 
+#include <sys/utsname.h>
 #include <sys/param.h>
 #include <sys/mount.h>
 #include <sys/sysctl.h>
@@ -33,13 +35,15 @@
 @property (weak, nonatomic) IBOutlet UIView *rebootView;
 @property (weak, nonatomic) IBOutlet UIView *clearSpaceView;
 @property (weak, nonatomic) IBOutlet UISwitch *disableSystemUpdatesSwitch;
+@property (strong, nonatomic) IBOutlet UIStackView *quickActionsView;
 
+@property (strong, nonatomic) IBOutlet UIButton *quickActionsButton;
 
 @end
 
 @implementation HomeViewController
 
--(NSString *) get_space_left {
+-(NSString *)get_space_left {
     const char *path = [[NSFileManager defaultManager] fileSystemRepresentationWithPath:[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) lastObject]];
     
     struct statfs stats;
@@ -49,10 +53,22 @@
                                           countStyle:NSByteCountFormatterCountStyleFile];
 }
 
-
 - (void)viewDidLoad {
     [super viewDidLoad];
     
+    //  quick actions on smaller screens
+    
+    struct utsname u;
+    uname(&u);
+#define __viewDidLoad_delen 4
+    char *ade = u.machine;
+    char *de[__viewDidLoad_delen] = {"iPhone6,1", "iPhone6,2", "iPhone8,4", "iPod7,1"};
+    for (int i = 0; i < __viewDidLoad_delen; ++i) {
+        if (strcmp(ade, de[i]) == 0) {
+            [_quickActionsView setHidden:YES];
+            [_quickActionsButton setHidden:NO];
+        }
+    }
     extern NSMutableDictionary *all_apps;
     if(all_apps == NULL) {
         
@@ -87,8 +103,10 @@
     [self.spaceInfoIndicator setHidden:YES];
     
     // check if we already disabled system updates and set the toggle
+    if ([[[NSUserDefaults standardUserDefaults] objectForKey:@"system_updates_disabled"] isEqual:nil]) {
+        [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"system_updates_disabled"];
+    }
     self.disableSystemUpdatesSwitch.on = [[NSUserDefaults standardUserDefaults] boolForKey:@"system_updates_disabled"];
-    
     
     // recognize taps
     [self.appsStorageView addGestureRecognizer:[[UITapGestureRecognizer alloc]
@@ -126,7 +144,6 @@
 }
 
 - (void)didTapClearSpace:(UITapGestureRecognizer *)gestureRecognizer {
-    
     UIViewController *packagesOptionsViewController=[self.storyboard instantiateViewControllerWithIdentifier:@"ClearCacheViewController"];
     packagesOptionsViewController.providesPresentationContextTransitionStyle = YES;
     packagesOptionsViewController.definesPresentationContext = YES;
@@ -135,33 +152,52 @@
 }
 
 // idea used from Jonathan Levin's tweet: https://twitter.com/Morpheus______/status/942561462450642944
-- (IBAction)didChangeDisableSystemUpdatesSwitch:(id)sender {
+- (IBAction)didToggleDisableSystemUpdatesSwitch:(id)sender {
     
     if (self.disableSystemUpdatesSwitch.on) {
         
-        show_alert(self, @"Feature disabled", @"This feature has been disabled due to some issues with the AppStore");
-//        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"system_updates_disabled"];
-//
-//        // chown Downloads to root
-//        chosen_strategy.strategy_chown("/var/mobile/Media/Downloads", ROOT_UID, WHEEL_GID);
-//        chosen_strategy.strategy_chmod("/var/mobile/Media/Downloads", 000);
-//
-//        // show a warning
-//        show_alert(self, @"Updates Disabled", @"Make sure to delete any downloaded updates in System Preferences → General → iPhone Storage → iOS → Remove. Note: if you have any AppStore issues, disable this option.");
+        //show_alert(self, @"Feature disabled", @"This feature has been disabled due to some issues with the AppStore");
+        [_disableSystemUpdatesSwitch setOn:NO];
+        
+        //        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"system_updates_disabled"];
+        //
+        //        // chown Downloads to root
+        //        chosen_strategy.strategy_chown("/var/mobile/Media/Downloads", ROOT_UID, WHEEL_GID);
+        //        chosen_strategy.strategy_chmod("/var/mobile/Media/Downloads", 000);
+        //
+        //        // show a warning
+        //        show_alert(self, @"Updates Disabled", @"Make sure to delete any downloaded updates in System Preferences → General → iPhone Storage → iOS → Remove. Note: if you have any AppStore issues, disable this option.");
         
     } else {
-
+        
         [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"system_updates_disabled"];
         
         sleep(1);
-
+        
         // chown Downloads back to mobile
         chosen_strategy.strategy_chown("/var/mobile/Media/Downloads", MOBILE_UID, MOBILE_GID);
-
+        
         chosen_strategy.strategy_chmod("/var/mobile/Media/Downloads", 0755);
-
+        
     }
     
+}
+- (IBAction)didChangeDisableSystemUpdatesSwitch:(id)sender {
+    [self didToggleDisableSystemUpdatesSwitch:sender];
+    BOOL c = _disableSystemUpdatesSwitch.on;
+    BOOL b = [[NSUserDefaults standardUserDefaults] boolForKey:@"system_updates_disabled"];
+    [_disableSystemUpdatesSwitch setOn:b animated:YES];
+    if (!c && !b) {
+        show_alert(self, @"Feature disabled", @"This feature has been disabled due to some issues with the AppStore");
+    }
+}
+
+- (IBAction)quickActionsButtonTapped:(id)sender {
+    UIViewController *quickActionsViewController = [self.storyboard instantiateViewControllerWithIdentifier:@"QuickActionsView"];
+    quickActionsViewController.providesPresentationContextTransitionStyle = YES;
+    quickActionsViewController.definesPresentationContext = YES;
+    [quickActionsViewController setModalPresentationStyle:UIModalPresentationOverCurrentContext];
+    [self presentViewController:quickActionsViewController animated:YES completion:nil];
 }
 
 @end
