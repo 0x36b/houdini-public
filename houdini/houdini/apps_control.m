@@ -1546,9 +1546,10 @@ kern_return_t apply_passcode_button_theme_for(char * image_path, int number) {
  *  Purpose: sets the active hosts file
  */
 kern_return_t set_custom_hosts(boolean_t use_custom) {
-    //  use the old method of REPLACING the file if /etc/bck_hosts exists
+    //  clean up old method
     if (access("/etc/bck_hosts", F_OK) != -1) {
-        kern_return_t ret = KERN_SUCCESS;
+        copy_file("/etc/bck_hosts", "/etc/hosts", ROOT_UID, WHEEL_GID, 0644);
+        /*kern_return_t ret = KERN_SUCCESS;
         // revert first
         copy_file("/etc/bck_hosts", "/etc/hosts", ROOT_UID, WHEEL_GID, 0644);
         // delete the old 'bck_hosts' file
@@ -1563,7 +1564,7 @@ kern_return_t set_custom_hosts(boolean_t use_custom) {
             // modify the custom_hosts file
             [[[[NSString stringWithContentsOfFile:@"/etc/hosts" encoding:NSUTF8StringEncoding error:nil] stringByReplacingOccurrencesOfString:@"#HOUDINI_START\n#MHB7" withString:@"#MHB7\n127.0.0.1 localhost\n255.255.255.255 broadcasthost\n::1 localhost"] stringByReplacingOccurrencesOfString:@"#HOUDINI_END" withString:@""] writeToFile:@"/etc/hosts" atomically:YES encoding:NSUTF8StringEncoding error:nil];
         }
-        return ret;
+        return ret;*/
     }
     //  new method: add or remove custom_hosts to or from /etc/hosts
     //  read the files
