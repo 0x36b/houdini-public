@@ -9,7 +9,9 @@
 #import <UIKit/UIKit.h>
 
 @interface HomeViewController : UIViewController
-
+- (void)didTapRespring:(UITapGestureRecognizer *)gestureRecognizer;
+- (void)didTapReboot:(UITapGestureRecognizer *)gestureRecognizer;
+- (void)didTapClearSpace:(UITapGestureRecognizer *)gestureRecognizer;
+- (IBAction)didToggleDisableSystemUpdatesSwitch:(id)sender;
 
 @end
-
