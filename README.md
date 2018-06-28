@@ -7,10 +7,9 @@ by Abraham Masri ([@cheesecakeufo](https://twitter.com/cheesecakeufo)) - exploit
 # How do I install this?
 You probably should just just go [here](http://iabem97.github.io/houdini_website) and follow the instructions.
 
-
 If you feel a bit more adventurous and want to see logs, use Xcode on a Mac (or a macOS VM), download the project and install XCode.
 
-Open the project "blue icon" and hit run.)
+Open the project (blue icon) and hit run.
 
 # Is this a full jailbreak?
 Nope. Once you run it, Cydia will NOT be installed.
